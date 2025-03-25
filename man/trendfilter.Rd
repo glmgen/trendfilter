@@ -9,6 +9,9 @@ trendfilter(
   x = seq_along(y),
   weights = rep(1, n),
   k = 3L,
+  boundary_condition = FALSE,
+  left_boundary_m = NULL,
+  right_boundary_m = NULL,
   family = c("gaussian", "logistic", "poisson"),
   method = c("admm", "pdip", "hybrid"),
   lambda = NULL,
@@ -33,6 +36,16 @@ Note that internally, these are rescaled to sum to 1.}
 \item{k}{Integer. Degree of the piecewise polynomial curve to be
 estimated. For example, \code{k = 0} corresponds to a piecewise constant
 curve.}
+
+\item{boundary_condition}{Logical. If \code{TRUE}, uses the Newton polynomial
+interpolation with divided difference at the boundary instead of the
+standard trend filtering formulation. Defaults to \code{FALSE}.}
+
+\item{left_boundary_m}{Integer, optional value. Value has to be between
+1 to k-1, If Null, uses value round(k/2). Defaults to \code{FALSE}.}
+
+\item{right_boundary_m}{Integer, optional value. Value has to be between
+1 to k-1, If Null, uses value round(k/2). Defaults to \code{FALSE}.}
 
 \item{family}{Character or function. Specifies the loss function
 to use. Valid options are:

@@ -22,6 +22,15 @@
 #' @param k Integer. Degree of the piecewise polynomial curve to be
 #'   estimated. For example, `k = 0` corresponds to a piecewise constant
 #'   curve.
+#'
+#' @param boundary_condition Logical. If `TRUE`, uses the Newton polynomial
+#'   interpolation with divided difference at the boundary instead of the
+#'   standard trend filtering formulation. Defaults to `FALSE`.
+#' @param left_boundary_m Integer, optional value. Value has to be between
+#'   1 to k-1, If Null, uses value round(k/2). Defaults to `FALSE`.
+#' @param right_boundary_m Integer, optional value. Value has to be between
+#'   1 to k-1, If Null, uses value round(k/2). Defaults to `FALSE`.
+#'
 #' @param family Character or function. Specifies the loss function
 #'   to use. Valid options are:
 #'   * `"gaussian"` - least squares loss (the default),
@@ -33,6 +42,7 @@
 #'   options passed as strings. So for example, `family = "gaussian"` and
 #'   `family = gaussian()` will produce the same results, but the first
 #'   will be much faster.character.
+#'
 #' @param method Character. Specifies the estimation algorithm to use.
 #' @param nlambda Integer. Number of lambda values to use in the sequence.
 #' @param lambda Vector. A user supplied sequence of tuning parameters which
@@ -57,6 +67,7 @@
 #'   internally). This can significantly speed convergence of the algorithm.
 #' @param control A list of control parameters for the estimation algorithm.
 #'   See the constructor [trendfilter_control_list()].
+
 #'
 #' @return An object with S3 class `trendfilter`. Among the list components:
 #' * `y` the input data.
@@ -93,6 +104,9 @@ trendfilter <- function(y,
                         x = seq_along(y),
                         weights = rep(1, n),
                         k = 3L,
+                        boundary_condition = FALSE,
+                        left_boundary_m = NULL,
+                        right_boundary_m = NULL,
                         family = c("gaussian", "logistic", "poisson"),
                         method = c("admm", "pdip", "hybrid"),
                         lambda = NULL,
@@ -102,6 +116,7 @@ trendfilter <- function(y,
                         lambda_min_ratio = 1e-5,
                         standardize = TRUE,
                         control = trendfilter_control_list()) {
+
   family <- arg_match(family)
   if (family != "gaussian") {
     cli_abort("Data family {.val {family}} is not yet implemented.")
@@ -150,8 +165,34 @@ trendfilter <- function(y,
     y <- (y - ym) / ys
   }
 
+
+  ####
+  # Ensure left_boundary_m is always set
+  if (is.null(left_boundary_m)) {
+    left_boundary_m <- ceiling(k/2)
+  } else if (boundary_condition) {
+    if (!is.numeric(left_boundary_m) || left_boundary_m != as.integer(left_boundary_m) ||
+        left_boundary_m < 1 || left_boundary_m >= k+2) {
+      cli_abort("Error: {.var left_boundary_m} must be an integer between 1 and (k-1), or NULL to use the default.")
+    }
+    left_boundary_m <- as.integer(left_boundary_m)
+  }
+
+  # Ensure right_boundary_m is always set
+  if (is.null(right_boundary_m)) {
+    right_boundary_m <- ceiling(k/2)
+  } else if (boundary_condition) {
+    if (!is.numeric(right_boundary_m) || right_boundary_m != as.integer(right_boundary_m) ||
+        right_boundary_m < 1 || right_boundary_m >= k+2) {
+      cli_abort("Error: {.var right_boundary_m} must be an integer between 1 and (k-1), or NULL to use the default.")
+    }
+    right_boundary_m <- as.integer(right_boundary_m)
+  }
+
+
+
   out <- admm_lambda_seq(
-    xsc, y, wsc, k,
+    xsc, y, wsc, k, boundary_condition, left_boundary_m, right_boundary_m,
     lambda, nlambda, lambda_max, lambda_min, lambda_min_ratio,
     control$admm_control$max_iter, control$admm_control$rho_scale,
     control$admm_control$tolerance,
@@ -175,4 +216,5 @@ trendfilter <- function(y,
     dof = out$dof,
     call = match.call()
   ), class = "trendfilter")
-}
+
+  }
