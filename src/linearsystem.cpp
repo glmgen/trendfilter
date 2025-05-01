@@ -146,7 +146,8 @@ void LinearSystem::kf_init(int n, int k, double rho, const Eigen::MatrixXd& Dseq
   Kt_b = VectorXd::Zero(k);
   Kinf_b = VectorXd::Zero(k);
   RQR = s_seq.array().square().inverse();
-  RQR *= 1 / rho; 
+  RQR *= 1 / sqrt(rho / n); 
+  z = n * sqrt(rho / n);
   T.row(0) = Dseq.row(0);
   // backward: 
   r = VectorXd::Zero(k);
@@ -174,7 +175,7 @@ void LinearSystem::kf_iter(const Eigen::VectorXd& y, const Eigen::ArrayXd& w,
   P1inf = MatrixXd::Identity(k, k);
   Pinf.col(0) = Map<Eigen::VectorXd>(P1inf.data(), k * k);
   while (rankp > 0 && d < n) {
-    df1step(y(d), 1, 1 / w(d), T, rqr, a1, P1, P1inf, rankp, vt_b, Ft_b,
+    df1step(y(d), 1, z / w(d), T, rqr, a1, P1, P1inf, rankp, vt_b, Ft_b,
             Finf_b, Kt_b, Kinf_b);
     at.col(d + 1) = a1;
     vt(d) = vt_b;
@@ -189,7 +190,7 @@ void LinearSystem::kf_iter(const Eigen::VectorXd& y, const Eigen::ArrayXd& w,
   for (int i = d; i < n; i++) {
     if (!equal_space) 
         rqr = RQR(i - d);
-    f1step(y(i), c(i - d) / s, 1, 1 / w(i), T, rqr, a1, P1,
+    f1step(y(i), c(i - d) / s, 1, z / w(i), T, rqr, a1, P1,
            vt_b, Ft_b, Kt_b); 
     vt(i) = vt_b;
     Ft(i) = Ft_b;
