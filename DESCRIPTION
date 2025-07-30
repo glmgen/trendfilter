@@ -21,12 +21,15 @@ Imports:
     tvdenoising (>= 1.0.0)
 Suggests: 
     Matrix,
+    ggmagnify,
     testthat (>= 3.0.0)
 LinkingTo: 
     dspline,
     Rcpp,
     RcppEigen,
     tvdenoising
+Remotes:
+    hughjonesd/ggmagnify
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)

@@ -22,6 +22,12 @@
 #' @param k Integer. Degree of the piecewise polynomial curve to be
 #'   estimated. For example, `k = 0` corresponds to a piecewise constant
 #'   curve.
+#'
+#' @param left_boundary_m Integer or 'natural', optional value. Value has to be between
+#'   1 to k-1 or 'natural. If Null, use 0. If 'natural', uses value round(k/2). Defaults to `NULL`.
+#' @param right_boundary_m Integer or 'natural', optional value. Value has to be between
+#'   1 to k-1 or 'natural. If Null, use 0. If 'natural', uses value round(k/2). Defaults to `NULL`.
+#'
 #' @param family Character or function. Specifies the loss function
 #'   to use. Valid options are:
 #'   * `"gaussian"` - least squares loss (the default),
@@ -33,6 +39,7 @@
 #'   options passed as strings. So for example, `family = "gaussian"` and
 #'   `family = gaussian()` will produce the same results, but the first
 #'   will be much faster.character.
+#'
 #' @param method Character. Specifies the estimation algorithm to use.
 #' @param nlambda Integer. Number of lambda values to use in the sequence.
 #' @param lambda Vector. A user supplied sequence of tuning parameters which
@@ -57,6 +64,7 @@
 #'   internally). This can significantly speed convergence of the algorithm.
 #' @param control A list of control parameters for the estimation algorithm.
 #'   See the constructor [trendfilter_control_list()].
+
 #'
 #' @return An object with S3 class `trendfilter`. Among the list components:
 #' * `y` the input data.
@@ -75,12 +83,12 @@
 #'
 #' @references
 #' Tibshirani (2014). "Adaptive piecewise polynomial estimation via trend
-#'   filtering," _Annals of Statistics_, **42**(1):285–323.
+#'   filtering," Annals of Statistics, 42(1):285–323.
 #'   [Link](https://www.stat.berkeley.edu/~ryantibs/papers/dspline.pdf)
 #'
 #' Tibshirani (2022), "Divided differences, falling factorials, and
 #'   discrete splines: Another look at trend filtering and related problems,"
-#'  _Foundations and Trends® in Machine Learning_, **15**(6):694-846.
+#'   Foundations and Trends in Machine Learning, 15(6):694-846.
 #'  [Link](https://www.stat.berkeley.edu/~ryantibs/papers/trendfilter.pdf)
 #'
 #' @examples
@@ -93,6 +101,8 @@ trendfilter <- function(y,
                         x = seq_along(y),
                         weights = rep(1, n),
                         k = 3L,
+                        left_boundary_m = 0,
+                        right_boundary_m = 0,
                         family = c("gaussian", "logistic", "poisson"),
                         method = c("admm", "pdip", "hybrid"),
                         lambda = NULL,
@@ -102,6 +112,7 @@ trendfilter <- function(y,
                         lambda_min_ratio = 1e-5,
                         standardize = TRUE,
                         control = trendfilter_control_list()) {
+
   family <- arg_match(family)
   if (family != "gaussian") {
     cli_abort("Data family {.val {family}} is not yet implemented.")
@@ -150,8 +161,41 @@ trendfilter <- function(y,
     y <- (y - ym) / ys
   }
 
+
+  ####
+  # Ensure boundary condition is always set
+  if (left_boundary_m == 0 && right_boundary_m == 0) {
+    boundary_condition <- FALSE
+  } else {
+    boundary_condition <- TRUE
+  }
+
+  if (left_boundary_m != 0) {
+    if (identical(left_boundary_m, "natural")) {
+      if (k %% 2 == 1){
+        left_boundary_m <- ceiling(k / 2)
+      } else {
+        cli_abort("Error {.var left_boundary_m}: 'natural' option is allowed when k is odd. Natural splines are defined as piecewise polynomials of odd degree k with additional constraints that force the highest even-order derivatives to be zero at the boundaries. When k is even, there's no standard natural boundary condition that guarantees the similar behavior as for odd k.")
+      }
+    } else {
+      assert_integerish(left_boundary_m, lower = 1, upper = k, len = 1)
+    }
+  }
+
+  if (right_boundary_m != 0) {
+    if (identical(right_boundary_m, "natural")) {
+      if (k %% 2 == 1){
+        right_boundary_m <- ceiling(k / 2)
+      } else {
+        cli_abort("Error {.var right_boundary_m}: 'natural' option is allowed when k is odd. Natural splines are defined as piecewise polynomials of odd degree k with additional constraints that force the highest even-order derivatives to be zero at the boundaries. When k is even, there's no standard natural boundary condition that guarantees the similar behavior as for odd k.")
+      }
+    } else {
+      assert_integerish(right_boundary_m, lower = 1, upper = k, len = 1)
+    }
+  }
+
   out <- admm_lambda_seq(
-    xsc, y, wsc, k,
+    xsc, y, wsc, k, boundary_condition, left_boundary_m, right_boundary_m,
     lambda, nlambda, lambda_max, lambda_min, lambda_min_ratio,
     control$admm_control$max_iter, control$admm_control$rho_scale,
     control$admm_control$tolerance,
@@ -172,7 +216,10 @@ trendfilter <- function(y,
     lambda = out$lambda,
     iters = out$iters,
     objective = out$tf_objective,
+    left_boundary_m <- left_boundary_m,
+    right_boundary_m <- right_boundary_m,
+    boundary_condition <- boundary_condition,
     dof = out$dof,
     call = match.call()
   ), class = "trendfilter")
-}
+  }
