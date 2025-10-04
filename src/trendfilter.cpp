@@ -1,6 +1,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <tuple>
+#include <cassert>
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <Rcpp.h>
@@ -9,9 +10,10 @@
 #include "utils.h"
 #include "linearsystem.h"
 #include "kf_utils.h"
+#include "pm_matrix.h"
+
 
 // [[Rcpp::depends(RcppEigen)]]
-
 typedef Eigen::COLAMDOrdering<int> Ord;
 
 using Rcpp::NumericVector;
@@ -66,66 +68,98 @@ VectorXd init_u(const VectorXd& residual, const NumericVector& xd, int k,
   return qr.solve((residual.array()*weights).matrix());
 }
 
+//////////////////////////////////////////////////////////////// main update begins
 void admm_single_lambda(int n, const Eigen::VectorXd& y, const NumericVector& xd,
-  const Eigen::ArrayXd& weights, int k, Eigen::Ref<Eigen::VectorXd> theta,
-  Eigen::Ref<Eigen::VectorXd> alpha, Eigen::Ref<Eigen::VectorXd> u, int& iter,
-  double& obj_val, const Eigen::SparseMatrix<double>& dk_mat_sq,
-  const Eigen::MatrixXd& denseD, const Eigen::VectorXd& s_seq, double lam,
-  int max_iter, double rho, double tol = 1e-5, int linear_solver = 2,
-  bool equal_space = false) {
-  // Initialize internals
+                        const Eigen::ArrayXd& weights, int k,
+                        bool boundary_condition, int left_boundary_m, int right_boundary_m,
+                        Eigen::Ref<Eigen::VectorXd> theta,
+                        Eigen::Ref<Eigen::VectorXd> alpha, Eigen::Ref<Eigen::VectorXd> u, int& iter,
+                        double& obj_val, const Eigen::SparseMatrix<double>& dk_mat_sq, const Eigen::SparseMatrix<double>& dk_mat,
+                        const Eigen::MatrixXd& denseD, const Eigen::VectorXd& s_seq, double lam,
+                        int max_iter, double rho, double tol = 1e-5, int linear_solver = 2,
+                        bool equal_space = false) {
+
+
+  // Initialize
   VectorXd tmp(n-k);
   VectorXd Dth_tmp(alpha.size());
   VectorXd alpha_old(alpha);
   VectorXd wy = (y.array()*weights).matrix();
   double rr, ss;
 
+  Eigen::SparseMatrix<double> Pm;
+  if (boundary_condition) {
+    Pm = pm_matrix(xd, left_boundary_m, right_boundary_m);
+  }
+
   // LinearSystem linear_system;
   // Technically, can form one SparseQR object, analyze the pattern once,
   // and then re-use it.
   // So call analyzePattern once, and then factorize repeatedly.
   // https://eigen.tuxfamily.org/dox/classEigen_1_1SparseQR.html#aba8ae81fd3d4ce9139eccb6b7a0256b2
+  // Set up linear system
   linear_system.construct(y, weights, k, rho, dk_mat_sq, denseD, s_seq, linear_solver);
   linear_system.compute(linear_solver);
 
-  // Perform ADMM updates
+
+    // ADMM loop
   int computation_info;
   iter = 0;
-  // double best_objective = tf_objective(y, theta, xd, weights, lam, k);
-  // VectorXd best_theta = theta;
   for (iter = 1; iter < max_iter; iter++) {
-    if (iter % 1000 == 0) Rcpp::checkUserInterrupt(); // check if killed
+    if (iter % 1000 == 0) Rcpp::checkUserInterrupt();
 
-    // theta update
-    std::tie(theta, computation_info) = linear_system.solve(y, weights,
-        alpha + u, k, xd, rho, denseD, s_seq, linear_solver, equal_space);
-    // if (computation_info > 1) {
-    //  std::cerr << "Eigen Sparse QR solve returned nonzero exit status.\n";
-    // }
-    Dth_tmp = Dkv(theta, k, xd);
-    tmp = Dth_tmp - u;
-    // alpha update
-    alpha = tf_dp(tmp, lam / rho);
-    // u update
-    u += alpha - Dth_tmp;
-    // double cur_objective = tf_objective(y, theta, xd, weights, lam, k);
+    // Update if boundary condition=False)
+    if (!boundary_condition) {
+      std::tie(theta, computation_info) = linear_system.solve(y, weights,
+                 alpha + u, k, xd, rho, denseD, s_seq, linear_solver, equal_space);
+    } else {
+      #ifndef NDEBUG
+      assert(u.size() == alpha.size() &&
+        "u and alpha must have the same length" );
 
-    // Check for convergence
-    rr = (Dth_tmp - alpha).norm() / alpha.size();
-    ss = rho * Dktv(alpha - alpha_old, k, xd).norm() / dk_mat_sq.rows();
-    alpha_old = alpha;
-    if (rr < tol && ss < tol) break;
-  }
-  obj_val = tf_objective(y, theta, xd, weights, lam, k);
-  // Rcpp::Rcout << iter << ": rr = " << rr << " ss = " << ss << std::endl;
+      assert(dk_mat.rows() == alpha.size() &&
+        "Dk rows must match length of alpha" );
+      #endif
+
+      Eigen::MatrixXd LHS = (Pm.transpose() * Pm) + rho * Pm.transpose() * (dk_mat_sq) * Pm;
+      Eigen::VectorXd RHS = Pm.transpose() * y + rho * Pm.transpose() * dk_mat.transpose() * (alpha + u);
+
+      Eigen::ColPivHouseholderQR<Eigen::MatrixXd> solver(LHS);
+      Eigen::VectorXd gamma = solver.solve(RHS);
+      theta = Pm * gamma;
+      }
+
+      // Compute Dk*theta, D1*alpha
+      Dth_tmp = Dkv(theta, k, xd);
+      tmp = Dth_tmp - u;
+
+      // Alpha Update
+      alpha = tf_dp(tmp, lam / rho);
+
+      // Dual Variable Update (u)
+      u += alpha - Dth_tmp;
+
+      // Convergence check
+      rr = (Dth_tmp - alpha).norm() / alpha.size();
+      ss = rho * Dktv(alpha - alpha_old, k, xd).norm() / dk_mat_sq.rows();
+      alpha_old = alpha;
+      if (rr < tol && ss < tol) break;
+    }
+
+    obj_val = tf_objective(y, theta, xd, weights, lam, k);
+
+
 }
-
+//////////////////////////////////////////////////////////////////////// main update ends
 // [[Rcpp::export]]
 Rcpp::List admm_lambda_seq(
     NumericVector x,
     Eigen::VectorXd const y,
     Eigen::ArrayXd const weights,
     int k,
+    bool boundary_condition,
+    int left_boundary_m,
+    int right_boundary_m,
     Eigen::VectorXd lambda,
     int nlambda = 50,
     double lambda_max = -1.0,
@@ -138,6 +172,7 @@ Rcpp::List admm_lambda_seq(
     double space_tolerance_ratio = -1.0) {
 
   int n = x.size();
+
 
   if (lambda[0] < tol / 100 && lambda_max <= 0) {
     lambda_max = get_lambda_max(x, y, weights, k);
@@ -165,7 +200,6 @@ Rcpp::List admm_lambda_seq(
     );
     return out;
   }
-
 
   // Initialize difference matrices and other helper objects
   SparseMatrix<double> dk_mat = get_dk_mat(k, x, false);
@@ -200,11 +234,11 @@ Rcpp::List admm_lambda_seq(
 
   for (int i = 0; i < nlambda; i++) {
     Rcpp::checkUserInterrupt();
-    admm_single_lambda(n, y, x, weights, k,
-      theta.col(i), alpha.col(i), u,
-      iters[i], objective_val[i],
-      dk_mat_sq, denseD, s_seq, lambda[i], max_iter, lambda[i]*rho_scale,
-      tol, linear_solver, equal_space);
+    admm_single_lambda(n, y, x, weights, k, boundary_condition, left_boundary_m, right_boundary_m,
+                       theta.col(i), alpha.col(i), u,
+                       iters[i], objective_val[i],
+                                              dk_mat_sq, dk_mat, denseD, s_seq, lambda[i], max_iter, lambda[i]*rho_scale,
+                                              tol, linear_solver, equal_space);
     dof[i] = calc_degrees_of_freedom(alpha.col(i), k);
     if (i + 1 < nlambda) {
       theta.col(i + 1) = theta.col(i);
@@ -220,6 +254,8 @@ Rcpp::List admm_lambda_seq(
     Rcpp::Named("dof") = dof
   );
   return out;
+
+
 }
 
 // The below is legacy code, currently unused.

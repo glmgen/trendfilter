@@ -1,9 +1,12 @@
 #ifndef UTILS_H
 #define UTILS_H
 
+#include <RcppEigen.h>
+
 using Rcpp::NumericVector;
 using Eigen::SparseMatrix;
 using Eigen::VectorXd;
+
 
 /* Matrix construction */
 Eigen::SparseMatrix<double> identity(int n);

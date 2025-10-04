@@ -9,6 +9,8 @@ trendfilter(
   x = seq_along(y),
   weights = rep(1, n),
   k = 3L,
+  left_boundary_m = 0,
+  right_boundary_m = 0,
   family = c("gaussian", "logistic", "poisson"),
   method = c("admm", "pdip", "hybrid"),
   lambda = NULL,
@@ -33,6 +35,12 @@ Note that internally, these are rescaled to sum to 1.}
 \item{k}{Integer. Degree of the piecewise polynomial curve to be
 estimated. For example, \code{k = 0} corresponds to a piecewise constant
 curve.}
+
+\item{left_boundary_m}{Integer or 'natural', optional value. Value has to be between
+1 to k-1 or 'natural. If Null, use 0. If 'natural', uses value round(k/2). Defaults to \code{NULL}.}
+
+\item{right_boundary_m}{Integer or 'natural', optional value. Value has to be between
+1 to k-1 or 'natural. If Null, use 0. If 'natural', uses value round(k/2). Defaults to \code{NULL}.}
 
 \item{family}{Character or function. Specifies the loss function
 to use. Valid options are:
@@ -117,12 +125,12 @@ plot(out)
 }
 \references{
 Tibshirani (2014). "Adaptive piecewise polynomial estimation via trend
-filtering," \emph{Annals of Statistics}, \strong{42}(1):285–323.
+filtering," Annals of Statistics, 42(1):285–323.
 \href{https://www.stat.berkeley.edu/~ryantibs/papers/dspline.pdf}{Link}
 
 Tibshirani (2022), "Divided differences, falling factorials, and
 discrete splines: Another look at trend filtering and related problems,"
-\emph{Foundations and Trends® in Machine Learning}, \strong{15}(6):694-846.
+Foundations and Trends in Machine Learning, 15(6):694-846.
 \href{https://www.stat.berkeley.edu/~ryantibs/papers/trendfilter.pdf}{Link}
 }
 \seealso{
