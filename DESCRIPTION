@@ -1,6 +1,6 @@
 Package: trendfilter
 Title: Univariate trend filtering
-Version: 0.0.2.9003
+Version: 0.0.2.9004
 Authors@R: c(
     person("Addison", "Hu", , "mail@huisaddison.com", role = c("aut", "cre")),
     person("Ryan J.", "Tibshirani", , "ryantibs@berkeley.edu", role = c("aut", "cph")),
