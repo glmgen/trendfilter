@@ -71,22 +71,24 @@ void admm_single_lambda(int n, const Eigen::VectorXd& y, const NumericVector& xd
   Eigen::Ref<Eigen::VectorXd> alpha, Eigen::Ref<Eigen::VectorXd> u, int& iter,
   double& obj_val, const Eigen::SparseMatrix<double>& dk_mat_sq,
   const Eigen::MatrixXd& denseD, const Eigen::VectorXd& s_seq, double lam,
-  int max_iter, double rho, double tol = 1e-5, int linear_solver = 2,
+  int max_iter, double rho_scale, double tol = 1e-5, int linear_solver = 2,
   bool equal_space = false) {
   // Initialize internals
   VectorXd tmp(n-k);
   VectorXd Dth_tmp(alpha.size());
   VectorXd alpha_old(alpha);
-  VectorXd wy = (y.array()*weights).matrix();
-  double rr, ss;
 
-  // LinearSystem linear_system;
-  // Technically, can form one SparseQR object, analyze the pattern once,
-  // and then re-use it.
-  // So call analyzePattern once, and then factorize repeatedly.
-  // https://eigen.tuxfamily.org/dox/classEigen_1_1SparseQR.html#aba8ae81fd3d4ce9139eccb6b7a0256b2
-  linear_system.construct(y, weights, k, rho, dk_mat_sq, denseD, s_seq, linear_solver);
-  linear_system.compute(linear_solver);
+  double rr, ss;
+  double rho = lam * rho_scale;
+  if (rho > Eigen::NumTraits<double>::epsilon()) {
+    // LinearSystem linear_system;
+    // Technically, can form one SparseQR object, analyze the pattern once,
+    // and then re-use it.
+    // So call analyzePattern once, and then factorize repeatedly.
+    // https://eigen.tuxfamily.org/dox/classEigen_1_1SparseQR.html#aba8ae81fd3d4ce9139eccb6b7a0256b2
+    linear_system.construct(y, weights, k, rho, dk_mat_sq, denseD, s_seq, linear_solver);
+    linear_system.compute(linear_solver);
+  }
 
   // Perform ADMM updates
   int computation_info;
@@ -97,15 +99,19 @@ void admm_single_lambda(int n, const Eigen::VectorXd& y, const NumericVector& xd
     if (iter % 1000 == 0) Rcpp::checkUserInterrupt(); // check if killed
 
     // theta update
-    std::tie(theta, computation_info) = linear_system.solve(y, weights,
-        alpha + u, k, xd, rho, denseD, s_seq, linear_solver, equal_space);
+    if (rho > Eigen::NumTraits<double>::epsilon()) {
+      std::tie(theta, computation_info) = linear_system.solve(y, weights,
+          alpha + u, k, xd, rho, denseD, s_seq, linear_solver, equal_space);
+    } else {
+      theta = y;
+    }
     // if (computation_info > 1) {
     //  std::cerr << "Eigen Sparse QR solve returned nonzero exit status.\n";
     // }
     Dth_tmp = Dkv(theta, k, xd);
     tmp = Dth_tmp - u;
     // alpha update
-    alpha = tf_dp(tmp, lam / rho);
+    alpha = tf_dp(tmp, 1 / rho_scale);
     // u update
     u += alpha - Dth_tmp;
     // double cur_objective = tf_objective(y, theta, xd, weights, lam, k);
@@ -139,7 +145,8 @@ Rcpp::List admm_lambda_seq(
 
   int n = x.size();
 
-  if (lambda[0] < tol / 100 && lambda_max <= 0) {
+
+  if (lambda_max < -tol) {
     lambda_max = get_lambda_max(x, y, weights, k);
   }
   get_lambda_seq(lambda, lambda_max, lambda_min, lambda_min_ratio, nlambda);
@@ -190,20 +197,23 @@ Rcpp::List admm_lambda_seq(
   }
 
   Eigen::MatrixXd alpha(n-k, nlambda);
+  VectorXd u(n-k);
 
   // Initialize ADMM variables
   // Project onto Legendre polynomials to initialize for largest lambda.
-  theta.col(0) = project_polynomials(x, y, weights, k);
-  alpha.col(0) = Dkv(theta.col(0), k, x);
-  VectorXd u = init_u((theta.col(0) - y)/(lambda[0]*rho_scale), x, k, weights);
 
+  if (lambda_max > 0) {
+    theta.col(0) = project_polynomials(x, y, weights, std::fmin(k, 3));
+    alpha.col(0) = Dkv(theta.col(0), k, x);
+    u = init_u((theta.col(0) - y) / (lambda_max*rho_scale), x, k, weights);
+  }
 
   for (int i = 0; i < nlambda; i++) {
     Rcpp::checkUserInterrupt();
     admm_single_lambda(n, y, x, weights, k,
       theta.col(i), alpha.col(i), u,
       iters[i], objective_val[i],
-      dk_mat_sq, denseD, s_seq, lambda[i], max_iter, lambda[i]*rho_scale,
+      dk_mat_sq, denseD, s_seq, lambda[i], max_iter, rho_scale,
       tol, linear_solver, equal_space);
     dof[i] = calc_degrees_of_freedom(alpha.col(i), k);
     if (i + 1 < nlambda) {

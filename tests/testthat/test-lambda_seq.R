@@ -28,4 +28,10 @@ test_that("get_lambda_seq works", {
     get_lambda_seq_r(double(10), 10, 0, 1e-4, 10),
     c(10^seq(log10(10), log10(1e-3), length.out = 9), 0)
   )
+
+  # allow 0 for lambda glmgen/trendfilter#18
+  expect_equal(
+    get_lambda_seq_r(double(1), -1, -1, 1e-4, 1),
+    0
+  )
 })

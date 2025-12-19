@@ -128,6 +128,10 @@ trendfilter <- function(y,
   assert_numeric(lambda, finite = TRUE, lower = 0, null.ok = TRUE)
   assert_class(control, "trendfilter_control")
 
+  if (!is.null(lambda)) {
+    lambda_max <- max(lambda)
+    lambda_min <- min(lambda)
+  }
   lambda_min <- lambda_min %||% -1.0
   lambda_max <- lambda_max %||% -1.0
   lambda <- sort(lambda, decreasing = TRUE) %||% double(nlambda)

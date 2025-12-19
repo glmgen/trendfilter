@@ -224,11 +224,7 @@ void get_lambda_seq(
     double lambda_min_ratio = 1e-5,
     int n_lambda = 50) {
 
-  if (!(lambda.array() < 1e-12).all()) {
-    lambda_min = lambda.minCoeff();
-    lambda_max = lambda.maxCoeff();
-    n_lambda = lambda.size();
-  } else {
+  if (lambda_max > 0 && n_lambda > 1) {
     double lmpad = lambda_min_ratio * lambda_max;
     lambda_min = (lambda_min < 0) ? lmpad : lambda_min;
     double ns = static_cast<double>(n_lambda) - 1;
