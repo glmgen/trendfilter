@@ -64,7 +64,7 @@ Eigen::SparseMatrix<double> get_penalty_mat(int k, NumericVector xd) {
 
 /* Polynomial subspace projection */
 Eigen::VectorXd legendre_polynomial(
-    Eigen::VectorXd x,
+    Eigen::VectorXd xa,
     int k,
     double a,
     double b) {
@@ -82,17 +82,31 @@ Eigen::VectorXd legendre_polynomial(
   }
 }
 
+// [[Rcpp::export]]
 Eigen::MatrixXd polynomial_basis(
     const Eigen::VectorXd& x,
     int k,
     double a = 0.0,
-    double b = 1.0) {
+    double b = 1.0,
+    int max_dim = 10
+  ) {
   int n = x.size();
-  MatrixXd basis_mat(n, k + 1);
-  for (int j = 0; j < k + 1; j++) {
-    basis_mat.col(j) = legendre_polynomial(x, j, a, b);
+  MatrixXd P(n, k + 1);
+  max_dim = max_dim < n ? max_dim : n - 1;
+  k = k > max_dim ? max_dim : k;
+  P.col(0) = VectorXd::Ones(n)
+  if (k > 0) {
+    ArrayXd xa = 2 * (x - a) / (b - a) - 1;
+    P.col(1) = xa.matrix();
   }
-  return basis_mat;
+  int n1 = 2*n + 1;
+  int nm1 = n + 1;
+  for (int j = 2; j < k + 1; j++) {
+    // https://en.wikipedia.org/wiki/Legendre_polynomials#Recurrence_relations
+    P.col(j) = n1 * (xa * P.col(j - 1).array()).matrix() - n * P.col(j - 2)
+    P.col(j) /= nm1;
+  }
+  return P;
 }
 
 Eigen::VectorXd project_polynomials(
