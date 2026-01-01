@@ -101,6 +101,21 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// polynomial_basis
+Eigen::MatrixXd polynomial_basis(const Eigen::VectorXd& x, int k, double a, double b, int max_dim);
+RcppExport SEXP _trendfilter_polynomial_basis(SEXP xSEXP, SEXP kSEXP, SEXP aSEXP, SEXP bSEXP, SEXP max_dimSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< const Eigen::VectorXd& >::type x(xSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< double >::type a(aSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< int >::type max_dim(max_dimSEXP);
+    rcpp_result_gen = Rcpp::wrap(polynomial_basis(x, k, a, b, max_dim));
+    return rcpp_result_gen;
+END_RCPP
+}
 // get_lambda_max
 double get_lambda_max(const NumericVector& x, const Eigen::VectorXd& y, const Eigen::ArrayXd& weights, int k);
 RcppExport SEXP _trendfilter_get_lambda_max(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP kSEXP) {
@@ -177,6 +192,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_trendfilter_admm_lambda_seq", (DL_FUNC) &_trendfilter_admm_lambda_seq, 14},
     {"_trendfilter_get_dk_mat", (DL_FUNC) &_trendfilter_get_dk_mat, 3},
     {"_trendfilter_get_penalty_mat", (DL_FUNC) &_trendfilter_get_penalty_mat, 2},
+    {"_trendfilter_polynomial_basis", (DL_FUNC) &_trendfilter_polynomial_basis, 5},
     {"_trendfilter_get_lambda_max", (DL_FUNC) &_trendfilter_get_lambda_max, 4},
     {"_trendfilter_calc_degrees_of_freedom", (DL_FUNC) &_trendfilter_calc_degrees_of_freedom, 3},
     {"_trendfilter_get_lambda_seq_r", (DL_FUNC) &_trendfilter_get_lambda_seq_r, 5},

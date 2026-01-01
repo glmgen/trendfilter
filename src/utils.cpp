@@ -62,7 +62,6 @@ Eigen::SparseMatrix<double> get_penalty_mat(int k, NumericVector xd) {
   return dspline::rcpp_b_mat(k, xd, true, Rcpp::seq(0, n - k - 1), true);
 }
 
-
 // [[Rcpp::export]]
 Eigen::MatrixXd polynomial_basis(
     const Eigen::VectorXd& x,
@@ -72,21 +71,20 @@ Eigen::MatrixXd polynomial_basis(
     int max_dim = 10
   ) {
   int n = x.size();
-  MatrixXd P(n, k + 1);
   ArrayXd xa;
   max_dim = max_dim < n ? max_dim : n - 1;
   k = k > max_dim ? max_dim : k;
+  MatrixXd P(n, k + 1);
   P.col(0) = VectorXd::Ones(n);
   if (k > 0) {
     xa = 2 * (x.array() - a) / (b - a) - 1;
     P.col(1) = xa.matrix();
   }
-  int n1 = 2*n + 1;
-  int nm1 = n + 1;
   for (int j = 2; j < k + 1; j++) {
     // https://en.wikipedia.org/wiki/Legendre_polynomials#Recurrence_relations
-    P.col(j) = n1 * (xa * P.col(j - 1).array()).matrix() - n * P.col(j - 2);
-    P.col(j) /= nm1;
+    int nn = j - 1;
+    P.col(j) = (2*nn + 1)*(xa * P.col(nn).array()).matrix() - nn * P.col(nn-1);
+    P.col(j) /= j;
   }
   return P;
 }
