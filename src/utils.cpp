@@ -89,10 +89,11 @@ Eigen::MatrixXd polynomial_basis(
   return P;
 }
 
+// [[Rcpp::export]]
 Eigen::VectorXd project_polynomials(
     const NumericVector& x, // should this be Eigen?
-    const VectorXd& y,
-    const ArrayXd& weights,
+    const Eigen::VectorXd& y,
+    const Eigen::ArrayXd& weights,
     int k) {
   Eigen::ColPivHouseholderQR<MatrixXd> qr;
   ArrayXd sqrt_weights = weights.sqrt();
