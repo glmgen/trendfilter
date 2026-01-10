@@ -203,7 +203,7 @@ Rcpp::List admm_lambda_seq(
   // Project onto Legendre polynomials to initialize for largest lambda.
 
   if (lambda_max > 0) {
-    theta.col(0) = project_polynomials(x, y, weights, std::fmin(k, 3));
+    theta.col(0) = project_polynomials(x, y, weights, k);
     alpha.col(0) = Dkv(theta.col(0), k, x);
     u = init_u((theta.col(0) - y) / (lambda_max*rho_scale), x, k, weights);
   }
