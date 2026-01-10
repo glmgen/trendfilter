@@ -89,19 +89,21 @@
 #' out <- trendfilter(y, x)
 #'
 #' plot(out)
-trendfilter <- function(y,
-                        x = seq_along(y),
-                        weights = rep(1, n),
-                        k = 3L,
-                        family = c("gaussian", "logistic", "poisson"),
-                        method = c("admm", "pdip", "hybrid"),
-                        lambda = NULL,
-                        nlambda = 50L,
-                        lambda_max = NULL,
-                        lambda_min = NULL,
-                        lambda_min_ratio = 1e-5,
-                        standardize = TRUE,
-                        control = trendfilter_control_list()) {
+trendfilter <- function(
+  y,
+  x = seq_along(y),
+  weights = rep(1, n),
+  k = 3L,
+  family = c("gaussian", "logistic", "poisson"),
+  method = c("admm", "pdip", "hybrid"),
+  lambda = NULL,
+  nlambda = 50L,
+  lambda_max = NULL,
+  lambda_min = NULL,
+  lambda_min_ratio = 1e-5,
+  standardize = TRUE,
+  control = trendfilter_control_list()
+) {
   family <- arg_match(family)
   if (family != "gaussian") {
     cli_abort("Data family {.val {family}} is not yet implemented.")
@@ -116,13 +118,20 @@ trendfilter <- function(y,
   assert_numeric(weights, lower = 0, finite = TRUE, len = n)
   assert_integerish(k, lower = 0L, upper = n - 1L, len = 1L)
   assert_integerish(nlambda, lower = 1L, len = 1L)
-  assert_numeric(lambda_max,
-    len = 1L, lower = lambda_min %||% 0, finite = TRUE,
+  assert_numeric(
+    lambda_max,
+    len = 1L,
+    lower = lambda_min %||% 0,
+    finite = TRUE,
     null.ok = TRUE
   )
-  assert_numeric(lambda_min,
-    len = 1L, lower = 0, upper = lambda_max %||% Inf,
-    finite = TRUE, null.ok = TRUE
+  assert_numeric(
+    lambda_min,
+    len = 1L,
+    lower = 0,
+    upper = lambda_max %||% Inf,
+    finite = TRUE,
+    null.ok = TRUE
   )
   assert_numeric(lambda_min_ratio, lower = 0, upper = 1, len = 1L)
   assert_numeric(lambda, finite = TRUE, lower = 0, null.ok = TRUE)
@@ -154,29 +163,46 @@ trendfilter <- function(y,
     y <- (y - ym) / ys
   }
 
+  linear_solver_int <- match(
+    control$admm_control$linear_solver,
+    c("sparse_qr", "kalman_filter", "sparse_cholesky")
+  )
   out <- admm_lambda_seq(
-    xsc, y, wsc, k,
-    lambda, nlambda, lambda_max, lambda_min, lambda_min_ratio,
-    control$admm_control$max_iter, control$admm_control$rho_scale,
+    xsc,
+    y,
+    wsc,
+    k,
+    lambda,
+    nlambda,
+    lambda_max,
+    lambda_min,
+    lambda_min_ratio,
+    control$admm_control$max_iter,
+    control$admm_control$rho_scale,
     control$admm_control$tolerance,
-    if (k == 1L) 0L else match(control$admm_control$linear_solver, c("sparse_qr", "kalman_filter")),
+    if (k == 1L) 0L else linear_solver_int,
     control$admm_control$space_tolerance_ratio
   )
 
   alpha <- NULL
-  if (!is.null(out$alpha)) alpha <- drop(out$alpha) * ys
+  if (!is.null(out$alpha)) {
+    alpha <- drop(out$alpha) * ys
+  }
 
-  structure(enlist(
-    y = y * ys + ym,
-    x,
-    weights,
-    k,
-    theta = drop(out$theta) * ys + ym,
-    alpha = alpha,
-    lambda = out$lambda,
-    iters = out$iters,
-    objective = out$tf_objective,
-    dof = out$dof,
-    call = match.call()
-  ), class = "trendfilter")
+  structure(
+    enlist(
+      y = y * ys + ym,
+      x,
+      weights,
+      k,
+      theta = drop(out$theta) * ys + ym,
+      alpha = alpha,
+      lambda = out$lambda,
+      iters = out$iters,
+      objective = out$tf_objective,
+      dof = out$dof,
+      call = match.call()
+    ),
+    class = "trendfilter"
+  )
 }
