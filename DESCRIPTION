@@ -1,6 +1,6 @@
 Package: trendfilter
 Title: Univariate trend filtering
-Version: 0.0.2.9004
+Version: 0.0.2.9005
 Authors@R: c(
     person("Addison", "Hu", , "mail@huisaddison.com", role = c("aut", "cre")),
     person("Ryan J.", "Tibshirani", , "ryantibs@berkeley.edu", role = c("aut", "cph")),
@@ -30,4 +30,4 @@ LinkingTo:
 Config/testthat/edition: 3
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3

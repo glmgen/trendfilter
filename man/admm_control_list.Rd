@@ -8,7 +8,7 @@ admm_control_list(
   max_iter = 10000,
   rho_scale = 1,
   tolerance = 1e-04,
-  linear_solver = c("kalman_filter", "sparse_qr"),
+  linear_solver = c("kalman_filter", "sparse_qr", "sparse_cholesky"),
   space_tolerance_ratio = sqrt(.Machine$double.eps),
   ...
 )
@@ -22,9 +22,11 @@ Lagrangian penalty parameter \eqn{\rho}.}
 \item{tolerance}{Double. The convergence tolerance for the ADMM algorithm.}
 
 \item{linear_solver}{Integer. Solver for the linear system in ADMM when
-k > 1: \code{kalman_filter} for Kalman filter or \code{sparse_qr} for sparse QR decomposition.}
+k > 1: \code{kalman_filter} for Kalman filter, \code{sparse_qr} for sparse QR
+decomposition, or \code{sparse_cholesky} for Cholesky.}
 
-\item{space_tolerance_ratio}{Double. The tolerance ratio of to detect that the signal is equally spaced.}
+\item{space_tolerance_ratio}{Double. The tolerance ratio of to detect that
+the signal is equally spaced.}
 
 \item{...}{not used}
 }
