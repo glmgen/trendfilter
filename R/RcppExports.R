@@ -25,6 +25,14 @@ get_penalty_mat <- function(k, xd) {
     .Call(`_trendfilter_get_penalty_mat`, k, xd)
 }
 
+polynomial_basis <- function(x, k, a = 0.0, b = 1.0, max_dim = 10L) {
+    .Call(`_trendfilter_polynomial_basis`, x, k, a, b, max_dim)
+}
+
+project_polynomials <- function(x, y, weights, k) {
+    .Call(`_trendfilter_project_polynomials`, x, y, weights, k)
+}
+
 get_lambda_max <- function(x, y, weights, k) {
     .Call(`_trendfilter_get_lambda_max`, x, y, weights, k)
 }

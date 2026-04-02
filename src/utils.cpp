@@ -62,43 +62,38 @@ Eigen::SparseMatrix<double> get_penalty_mat(int k, NumericVector xd) {
   return dspline::rcpp_b_mat(k, xd, true, Rcpp::seq(0, n - k - 1), true);
 }
 
-/* Polynomial subspace projection */
-Eigen::VectorXd legendre_polynomial(
-    Eigen::VectorXd x,
-    int k,
-    double a,
-    double b) {
-  ArrayXd xa = 2 * (x.array() - a) / (b - a) - 1;
-  if (k == 0) {
-    return VectorXd::Ones(x.size());
-  } else if (k == 1) {
-    return xa.matrix();
-  } else if (k == 2) {
-    return (1.5*xa.pow(2) - 0.5).matrix();
-  } else if (k == 3) {
-    return (2.5*xa.pow(3) - 1.5*xa).matrix();
-  } else {
-    throw std::invalid_argument("`k` must be 0, 1, 2, or 3.");
-  }
-}
-
+// [[Rcpp::export]]
 Eigen::MatrixXd polynomial_basis(
     const Eigen::VectorXd& x,
     int k,
     double a = 0.0,
-    double b = 1.0) {
+    double b = 1.0,
+    int max_dim = 10
+  ) {
   int n = x.size();
-  MatrixXd basis_mat(n, k + 1);
-  for (int j = 0; j < k + 1; j++) {
-    basis_mat.col(j) = legendre_polynomial(x, j, a, b);
+  ArrayXd xa;
+  max_dim = max_dim < n ? max_dim : n - 1;
+  k = k > max_dim ? max_dim : k;
+  MatrixXd P(n, k + 1);
+  P.col(0) = VectorXd::Ones(n);
+  if (k > 0) {
+    xa = 2 * (x.array() - a) / (b - a) - 1;
+    P.col(1) = xa.matrix();
   }
-  return basis_mat;
+  for (int j = 2; j < k + 1; j++) {
+    // https://en.wikipedia.org/wiki/Legendre_polynomials#Recurrence_relations
+    int nn = j - 1;
+    P.col(j) = (2*nn + 1)*(xa * P.col(nn).array()).matrix() - nn * P.col(nn-1);
+    P.col(j) /= j;
+  }
+  return P;
 }
 
+// [[Rcpp::export]]
 Eigen::VectorXd project_polynomials(
     const NumericVector& x, // should this be Eigen?
-    const VectorXd& y,
-    const ArrayXd& weights,
+    const Eigen::VectorXd& y,
+    const Eigen::ArrayXd& weights,
     int k) {
   Eigen::ColPivHouseholderQR<MatrixXd> qr;
   ArrayXd sqrt_weights = weights.sqrt();
