@@ -26,8 +26,9 @@ void LinearSystem::construct(const Eigen::VectorXd& y, const Eigen::ArrayXd& wei
     int k, double rho, const Eigen::SparseMatrix<double>& dk_mat_sq, 
     const Eigen::MatrixXd& Dseq, const Eigen::VectorXd& s_seq, int solver) {
   switch(solver) {
-    case 0: 
-    case 1: {
+    case 0: [[fallthrough]];
+    case 1: [[fallthrough]];
+    case 3: {
       wy = (y.array() * weights).matrix();
       // Form Gram matrix and set up linear system for theta update
       A = rho * dk_mat_sq;
@@ -61,6 +62,10 @@ void LinearSystem::compute(int solver) {
     }
     case 2:
       break;
+    case 3: {
+      cholesky.compute(A);
+      break;
+    }
   }
 }
 
@@ -83,6 +88,12 @@ std::tuple<VectorXd,int> LinearSystem::solve(const Eigen::VectorXd& y,
     }
     case 2: {
       LinearSystem::kf_iter(y, weights, adj_mean, Dseq, s_seq, equal_space);
+      break;
+    }
+    case 3: {
+      VectorXd v = wy + rho * Dktv(adj_mean, k, x);
+      sol = cholesky.solve(v);
+      info = int(cholesky.info());
       break;
     }
   }

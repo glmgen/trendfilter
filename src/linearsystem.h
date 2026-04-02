@@ -38,6 +38,8 @@ class LinearSystem {
     double vt_b, Ft_b, Finf_b;
     Eigen::VectorXd RQR, a1, vt, Ft, Finf, Kt_b, Kinf_b, r,  r1, rtmp, sol;
     Eigen::MatrixXd T, at, P1, Pt, P1inf, Pinf, Kt, Kinf, L0, L1, Ptemp;
+    // cholesky
+    Eigen::SimplicialLDLT<Eigen::SparseMatrix<double>> cholesky;
 };
 
 #endif

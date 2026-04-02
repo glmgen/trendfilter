@@ -1,6 +1,7 @@
 # trendfilter (development version)
 
 * Initial CRAN submission.
+* add option to ues `sparse_cholesky` as a solver.
 
 # trendfilter 0.0.2
 
