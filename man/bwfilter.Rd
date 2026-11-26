@@ -15,6 +15,7 @@ bwfilter(
   lambda_min = NULL,
   lambda_min_ratio = NULL,
   standardize = TRUE,
+  compute_dof = FALSE,
   control = bwfilter_control_list()
 )
 }
@@ -44,22 +45,31 @@ decreasing order.}
 
 \item{nlambda}{Integer. Number of lambda values to use in the sequence.}
 
-\item{lambda_max}{Optional value for the largest \code{lambda} to use. By default,
-this is chosen so that the fit is very nearly a polynomial of degree \code{k}
-(every non-polynomial component of \code{y} is shrunk by a factor of at least
-100).}
+\item{lambda_max}{Optional value for the largest \code{lambda} to use. By
+default, this follows the rule of thumb used for ridge regression in
+\code{glmnet}: the largest \code{lambda} that would be used by \code{\link[=trendfilter]{trendfilter()}} (the
+smallest value giving a polynomial fit under the \eqn{\ell_1} penalty)
+divided by \code{0.001}.}
 
-\item{lambda_min}{Optional value for the smallest \code{lambda} to use. By default,
-this is chosen so that the fit very nearly interpolates \code{y} (every component
-is shrunk by at most 1\%).}
+\item{lambda_min}{Optional value for the smallest \code{lambda} to use (> 0).}
 
-\item{lambda_min_ratio}{Optional. If supplied and \code{lambda_min} is not,
-\code{lambda_min = lambda_max * lambda_min_ratio}. This argument has no
-effect if there is a user-defined \code{lambda} sequence.}
+\item{lambda_min_ratio}{If neither \code{lambda} nor \code{lambda_min} is specified,
+\code{lambda_min = lambda_max * lambda_min_ratio}. The default, \code{NULL}, uses
+\code{1e-4^(k + 1)}: \code{glmnet}'s ridge default raised to the power \code{k + 1}. The
+effective degrees of freedom grow roughly like
+\eqn{\lambda^{-1/(2(k+1))}}, so this gives a similar range of fits for
+every \code{k}. This argument has no effect if there is a user-defined
+\code{lambda} sequence.}
 
 \item{standardize}{If \code{TRUE} (the default), \code{y} will be centered and scaled
 by its mean and standard deviation (and the operation inverted for \code{theta}
 internally). This can significantly speed convergence of the algorithm.}
+
+\item{compute_dof}{Logical. Should the effective degrees of freedom be
+computed? This requires the eigenvalues of a banded \eqn{n \times n}
+generalized eigenproblem, which costs \eqn{O(n^2 k)} time (compared to
+\eqn{O(n k^2)} per \code{lambda} for the fit itself), so it is off by default.
+Once computed, the degrees of freedom for all \code{lambda} values are cheap.}
 
 \item{control}{A list of control parameters for the linear solver.
 See the constructor \code{\link[=bwfilter_control_list]{bwfilter_control_list()}}.}
@@ -75,8 +85,9 @@ Among the list components:
 each column corresponding to one value of \code{lambda}.
 \item \code{lambda} the values of \code{lambda} actually used in the algorithm.
 \item \code{k} order of the penalty minus 1.
-\item \code{dof} the (exact) effective degrees of freedom of the linear smoother,
-\eqn{\mathrm{tr}((W + 2\lambda D^\top D)^{-1} W)}, for each \code{lambda}.
+\item \code{dof} if \code{compute_dof = TRUE}, the (exact) effective degrees of freedom
+of the linear smoother, \eqn{\mathrm{tr}((W + 2\lambda D^\top D)^{-1}
+    W)}, for each \code{lambda}. Otherwise \code{NULL}.
 \item \code{objective} the value of the objective function for each value of \code{lambda}
 (on the standardized scale if \code{standardize = TRUE}).
 }
@@ -105,7 +116,7 @@ Because the penalty is quadratic, the solution is available in closed form,
 x <- 1:100 / 101 * 2 * pi
 y <- sin(x) + .2 * rnorm(100)
 out <- bwfilter(y, x)
-out$dof
+bwfilter(y, x, nlambda = 5, compute_dof = TRUE)$dof
 
 plot(out)
 }

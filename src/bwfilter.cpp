@@ -58,9 +58,6 @@ Rcpp::List bw_lambda_seq(
 
   // tridiagonal system when the penalty is first order
   if (kk == 1) linear_solver = 0;
-  // The Kalman filter uses observation variance 1 / w, so it cannot handle
-  // zero weights; fall back to sparse Cholesky.
-  if (linear_solver == 2 && (weights <= 0).any()) linear_solver = 3;
 
   bool equal_space = false;
   MatrixXd denseD;

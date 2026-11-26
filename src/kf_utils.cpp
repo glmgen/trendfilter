@@ -1,6 +1,8 @@
 #include <Eigen/Dense>
 #include <Eigen/Sparse>
 #include <tuple>
+#include <cmath>
+#include <limits>
 #include <Rcpp.h>
 #include <RcppEigen.h>
 #include "utils.h"
@@ -149,7 +151,12 @@ void df1step(double y, double Z, double H, const Eigen::MatrixXd& A, double RQR,
   Kinf = Pinf.col(0) * Z;
   Finf = Z * Kinf(0);
 
-  if (Finf > tol) {  // should always happen
+  if (!std::isfinite(H)) {
+    // Zero weight (H = 1 / w = Inf): treat as a missing observation, so
+    // prediction only, no update. Ft = Inf zeroes the gain in the smoother.
+    Finf = 0;
+    Ft = std::numeric_limits<double>::infinity();
+  } else if (Finf > tol) {  // should always happen
     a += vt * Kinf / Finf;
     P += Ft * Kinf * Kinf.transpose() / pow(Finf, 2);
     P -= Kt * Kinf.transpose() / Finf + Kinf * Kt.transpose() / Finf;

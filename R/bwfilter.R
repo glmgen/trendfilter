@@ -23,16 +23,24 @@
 #' @inheritParams trendfilter
 #' @param k Integer. Order of the penalty is `k + 1`, as in [trendfilter()].
 #'   Must be at most `n - 2`.
-#' @param lambda_max Optional value for the largest `lambda` to use. By default,
-#'   this is chosen so that the fit is very nearly a polynomial of degree `k`
-#'   (every non-polynomial component of `y` is shrunk by a factor of at least
-#'   100).
-#' @param lambda_min Optional value for the smallest `lambda` to use. By default,
-#'   this is chosen so that the fit very nearly interpolates `y` (every component
-#'   is shrunk by at most 1%).
-#' @param lambda_min_ratio Optional. If supplied and `lambda_min` is not,
-#'   `lambda_min = lambda_max * lambda_min_ratio`. This argument has no
-#'   effect if there is a user-defined `lambda` sequence.
+#' @param lambda_max Optional value for the largest `lambda` to use. By
+#'   default, this follows the rule of thumb used for ridge regression in
+#'   `glmnet`: the largest `lambda` that would be used by [trendfilter()] (the
+#'   smallest value giving a polynomial fit under the \eqn{\ell_1} penalty)
+#'   divided by `0.001`.
+#' @param lambda_min Optional value for the smallest `lambda` to use (> 0).
+#' @param lambda_min_ratio If neither `lambda` nor `lambda_min` is specified,
+#'   `lambda_min = lambda_max * lambda_min_ratio`. The default, `NULL`, uses
+#'   `1e-4^(k + 1)`: `glmnet`'s ridge default raised to the power `k + 1`. The
+#'   effective degrees of freedom grow roughly like
+#'   \eqn{\lambda^{-1/(2(k+1))}}, so this gives a similar range of fits for
+#'   every `k`. This argument has no effect if there is a user-defined
+#'   `lambda` sequence.
+#' @param compute_dof Logical. Should the effective degrees of freedom be
+#'   computed? This requires the eigenvalues of a banded \eqn{n \times n}
+#'   generalized eigenproblem, which costs \eqn{O(n^2 k)} time (compared to
+#'   \eqn{O(n k^2)} per `lambda` for the fit itself), so it is off by default.
+#'   Once computed, the degrees of freedom for all `lambda` values are cheap.
 #' @param control A list of control parameters for the linear solver.
 #'   See the constructor [bwfilter_control_list()].
 #'
@@ -45,8 +53,9 @@
 #'     each column corresponding to one value of `lambda`.
 #' * `lambda` the values of `lambda` actually used in the algorithm.
 #' * `k` order of the penalty minus 1.
-#' * `dof` the (exact) effective degrees of freedom of the linear smoother,
-#'     \eqn{\mathrm{tr}((W + 2\lambda D^\top D)^{-1} W)}, for each `lambda`.
+#' * `dof` if `compute_dof = TRUE`, the (exact) effective degrees of freedom
+#'     of the linear smoother, \eqn{\mathrm{tr}((W + 2\lambda D^\top D)^{-1}
+#'     W)}, for each `lambda`. Otherwise `NULL`.
 #' * `objective` the value of the objective function for each value of `lambda`
 #'     (on the standardized scale if `standardize = TRUE`).
 #' @export
@@ -63,7 +72,7 @@
 #' x <- 1:100 / 101 * 2 * pi
 #' y <- sin(x) + .2 * rnorm(100)
 #' out <- bwfilter(y, x)
-#' out$dof
+#' bwfilter(y, x, nlambda = 5, compute_dof = TRUE)$dof
 #'
 #' plot(out)
 bwfilter <- function(
@@ -77,6 +86,7 @@ bwfilter <- function(
   lambda_min = NULL,
   lambda_min_ratio = NULL,
   standardize = TRUE,
+  compute_dof = FALSE,
   control = bwfilter_control_list()
 ) {
   n <- length(y)
@@ -113,6 +123,7 @@ bwfilter <- function(
     len = 1L,
     null.ok = TRUE
   )
+  assert_logical(compute_dof, len = 1L, any.missing = FALSE)
   assert_numeric(lambda, finite = TRUE, lower = 0, null.ok = TRUE)
   assert_class(control, "bwfilter_control")
 
@@ -133,13 +144,21 @@ bwfilter <- function(
     y <- (y - ym) / ys
   }
 
-  # Generalized eigenvalues give both the exact dof and default lambdas
-  spec <- bw_spectrum(xsc, wsc, k)
-
   if (is.null(lambda)) {
-    lambda <- bw_default_lambda(
-      spec, k, nlambda, lambda_max, lambda_min, lambda_min_ratio
-    )
+    # glmnet's ridge rule of thumb: the l1 lambda_max divided by 1e-3
+    lambda_max <- lambda_max %||% (get_lambda_max(xsc, y, wsc, k) / 1e-3)
+    lambda_min_ratio <- lambda_min_ratio %||% 1e-4^(k + 1)
+    lambda <- if (nlambda == 1L) {
+      lambda_max
+    } else {
+      get_lambda_seq_r(
+        double(nlambda),
+        lambda_max,
+        lambda_min %||% -1.0,
+        lambda_min_ratio,
+        nlambda
+      )
+    }
   } else {
     lambda <- sort(lambda, decreasing = TRUE)
   }
@@ -167,7 +186,7 @@ bwfilter <- function(
       theta = drop(out$theta) * ys + ym,
       lambda = out$lambda,
       objective = out$objective,
-      dof = bw_dof(spec, out$lambda),
+      dof = if (compute_dof) bw_dof(bw_spectrum(xsc, wsc, k), out$lambda),
       call = match.call()
     ),
     class = c("bwfilter", "trendfilter")
@@ -185,44 +204,5 @@ bw_dof <- function(spec, lambda) {
       sum(ifelse(num > 0, num / den, 0))
     },
     double(1)
-  )
-}
-
-bw_default_lambda <- function(
-  spec,
-  k,
-  nlambda,
-  lambda_max,
-  lambda_min,
-  lambda_min_ratio
-) {
-  # mu solves D'D v = mu W v; the smoother shrinks that component by
-  # 1 / (1 + 2 * lambda * mu)
-  tau <- spec$tau[-seq_len(k + 1L)]
-  tau <- tau[tau > 0 & tau < 1]
-  mu <- tau / (spec$c * (1 - tau))
-  # eigenvalues below this are not resolvable in double precision
-  mu_floor <- 1e3 * .Machine$double.eps / spec$c
-  mu_min <- max(min(mu), mu_floor)
-  mu_max <- max(max(mu), mu_min)
-
-  lambda_max <- lambda_max %||% (50 / mu_min) # shrink by factor >= 100
-  if (is.null(lambda_min)) {
-    lambda_min <- if (!is.null(lambda_min_ratio)) {
-      lambda_min_ratio * lambda_max
-    } else {
-      0.005 / mu_max # shrink by factor <= 1.01
-    }
-    if (lambda_min >= lambda_max) lambda_min <- 1e-5 * lambda_max
-  }
-  if (nlambda == 1L) {
-    return(lambda_max)
-  }
-  get_lambda_seq_r(
-    double(nlambda),
-    lambda_max,
-    lambda_min,
-    lambda_min_ratio %||% 1e-5,
-    nlambda
   )
 }

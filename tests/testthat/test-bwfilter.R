@@ -22,7 +22,7 @@ test_that("bwfilter matches the closed-form solution for all solvers", {
       for (s in c("kalman_filter", "sparse_qr", "sparse_cholesky")) {
         fit <- bwfilter(
           y, x, w,
-          k = k, lambda = lam, standardize = FALSE,
+          k = k, lambda = lam, standardize = FALSE, compute_dof = TRUE,
           control = bwfilter_control_list(linear_solver = s)
         )
         for (i in seq_along(lam)) {
@@ -41,24 +41,27 @@ test_that("standardization does not change the fit", {
   expect_equal(f1$theta, f2$theta, tolerance = 1e-8)
 })
 
-test_that("default lambda path spans polynomial to interpolation", {
+test_that("default lambda path follows the (scaled) glmnet ridge rule", {
+  ys <- (y - mean(y)) / sd(y)
   for (k in 0:3) {
-    fit <- bwfilter(y, k = k)
+    fit <- bwfilter(y, k = k, compute_dof = TRUE)
+    xsc <- (x_even - 1) / (n - 1) * n
+    lmax <- get_lambda_max(xsc, ys, rep(1 / n, n), k) / 1e-3
     expect_length(fit$lambda, 50L)
-    expect_false(is.unsorted(rev(fit$lambda)))
-    expect_lt(fit$dof[1], k + 2)
-    expect_gt(fit$dof[50], n - 2)
+    expect_equal(fit$lambda[1], lmax)
+    expect_equal(fit$lambda[50], lmax * 1e-4^(k + 1))
     expect_false(is.unsorted(fit$dof))
-    # largest lambda is (nearly) a polynomial of degree k
-    pfit <- if (k == 0) rep(mean(y), n) else fitted(lm(y ~ poly(x_even, k)))
-    expect_equal(fit$theta[, 1], unname(pfit), tolerance = 0.05)
+    expect_true(all(fit$dof > k + 1))
   }
 })
 
 test_that("lambda = 0 interpolates and nlambda = 1 works", {
-  fit <- bwfilter(y, lambda = 0)
+  fit <- bwfilter(y, lambda = 0, compute_dof = TRUE)
   expect_equal(fit$theta, y)
   expect_equal(fit$dof, n)
+  expect_null(bwfilter(y, lambda = 0)$dof)
+  fit <- bwfilter(y, k = 1, lambda_min_ratio = 1e-4)
+  expect_equal(fit$lambda[50] / fit$lambda[1], 1e-4)
   fit <- bwfilter(y, nlambda = 1L)
   expect_length(fit$lambda, 1L)
   expect_gt(fit$lambda, 0)
@@ -71,13 +74,26 @@ test_that("unsorted x is handled and zero weights are allowed", {
   expect_equal(f1$theta, f2$theta)
 
   w0 <- w
-  w0[c(3, 20)] <- 0
-  fit <- bwfilter(y, x_even, w0, k = 2, lambda = lam, standardize = FALSE)
-  for (i in seq_along(lam)) {
-    r <- bw_dense(y, x_even, w0, 2, lam[i])
-    expect_equal(fit$theta[, i], r$theta, tolerance = 1e-6)
-    expect_equal(fit$dof[i], r$dof, tolerance = 1e-6)
+  w0[c(1, 3, 20, n)] <- 0
+  for (k in 0:3) {
+    for (s in c("kalman_filter", "sparse_qr", "sparse_cholesky")) {
+      fit <- bwfilter(
+        y, x_even, w0,
+        k = k, lambda = lam, standardize = FALSE, compute_dof = TRUE,
+        control = bwfilter_control_list(linear_solver = s)
+      )
+      for (i in seq_along(lam)) {
+        r <- bw_dense(y, x_even, w0, k, lam[i])
+        expect_equal(fit$theta[, i], r$theta, tolerance = 1e-6)
+        expect_equal(fit$dof[i], r$dof, tolerance = 1e-6)
+      }
+    }
   }
+  # default lambda sequence is finite with zero weights
+  lam0 <- bwfilter(y, weights = w0)$lambda
+  expect_true(all(is.finite(lam0) & lam0 > 0))
+  lam0 <- trendfilter(y, weights = w0)$lambda
+  expect_true(all(is.finite(lam0) & lam0 > 0))
 })
 
 test_that("bwfilter objects work with trendfilter methods", {
@@ -93,4 +109,11 @@ test_that("bwfilter argument checks", {
   expect_error(bwfilter(y, weights = c(rep(0, n - 2), 1, 1), k = 1))
   expect_error(bwfilter(y, control = trendfilter_control_list()))
   expect_error(bwfilter_control_list(linear_solver = "foo"))
+})
+
+test_that("Kalman filter handles zero weights in the diffuse initialization", {
+  w0 <- rep(1, n)
+  w0[1:2] <- 0
+  fit <- trendfilter(y, weights = w0, k = 2, lambda = c(1, .1))
+  expect_false(anyNA(fit$theta))
 })
