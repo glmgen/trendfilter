@@ -23,24 +23,23 @@ interpolate_lambda <- function(lambda, new_lambda, log_scale = FALSE) {
     right <- left
     sfrac <- rep(1, nums)
   } else {
-    # Interpolate in log(lambda) when the sequence spans many orders of
-    # magnitude (`bwfilter()`); a linear scale can't distinguish the small
-    # values there.
+    # The trendfilter (generalized lasso) path is piecewise linear in lambda,
+    # so interpolate linearly. The ridge path in `bwfilter()` is smooth in
+    # log(lambda) instead.
     if (log_scale && all(lambda > 0)) {
       lambda <- log(lambda)
       new_lambda <- log(new_lambda)
     }
-    k <- length(lambda)
-    sfrac <- (lambda[1] - new_lambda) / (lambda[1] - lambda[k])
-    lambda <- (lambda[1] - lambda) / (lambda[1] - lambda[k])
-    sfrac[sfrac < min(lambda)] <- min(lambda)
-    sfrac[sfrac > max(lambda)] <- max(lambda)
-    coord <- stats::approx(lambda, seq(lambda), sfrac)$y
+    # Work with the raw values: weights only involve the two neighbouring
+    # grid points, so they keep full precision however wide the range is.
+    sfrac <- pmin(pmax(new_lambda, min(lambda)), max(lambda))
+    coord <- stats::approx(lambda, seq_along(lambda), sfrac)$y
     left <- floor(coord)
     right <- ceiling(coord)
-    sfrac <- (sfrac - lambda[right]) / (lambda[left] - lambda[right])
+    gap <- lambda[left] - lambda[right]
+    sfrac <- (sfrac - lambda[right]) / gap
     sfrac[left == right] <- 1
-    sfrac[abs(lambda[left] - lambda[right]) < .Machine$double.eps] <- 1
+    sfrac[abs(gap) <= .Machine$double.eps * abs(lambda[left])] <- 1
   }
   list(left = left, right = right, frac = sfrac)
 }
