@@ -110,3 +110,44 @@ print.trendfilter_control <- function(x, ...) {
   cli::cli_end(d)
   print(x[[3]], prefix = "with an")
 }
+
+#' Bwfilter control list
+#'
+#' These arguments are used to handle the internals of [bwfilter()].
+#'
+#' @param linear_solver Character. Solver for the linear system
+#'   \eqn{(W + 2\lambda D^\top D)\theta = Wy} when `k > 0`: `kalman_filter`
+#'   for a Kalman filter/smoother, `sparse_qr` for sparse QR decomposition,
+#'   or `sparse_cholesky` for sparse Cholesky. When `k = 0` the system is
+#'   tridiagonal and is always solved directly.
+#' @inheritParams admm_control_list
+#'
+#' @return An object of class `bwfilter_control`
+#' @export
+#'
+#' @examples
+#' bwfilter_control_list()
+#' bwfilter_control_list(linear_solver = "sparse_qr")
+bwfilter_control_list <- function(
+  linear_solver = c("kalman_filter", "sparse_qr", "sparse_cholesky"),
+  space_tolerance_ratio = sqrt(.Machine$double.eps),
+  ...
+) {
+  rlang::check_dots_empty()
+  linear_solver <- rlang::arg_match(linear_solver)
+  assert_numeric(space_tolerance_ratio, lower = 0, finite = TRUE, len = 1L)
+  structure(
+    enlist(linear_solver, space_tolerance_ratio),
+    class = "bwfilter_control"
+  )
+}
+
+#' @export
+#' @method print bwfilter_control
+print.bwfilter_control <- function(x, ...) {
+  rlang::check_dots_empty()
+  cli::cli_h2("A `bwfilter()` configuration")
+  d <- cli::cli_div(theme = list(span.dt = list(color = "cornflowerblue")))
+  cli::cli_dl(x)
+  cli::cli_end(d)
+}
