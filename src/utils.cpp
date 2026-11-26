@@ -181,11 +181,14 @@ double get_lambda_max(
     const Eigen::VectorXd& y,
     const Eigen::ArrayXd& weights,
     int k) {
-  ArrayXd sqrt_weights = weights.sqrt();
+  // At lambda_max, the solution is the weighted polynomial projection of y,
+  // and the dual variable solves D^T u = W (y - P_W y). This system is
+  // consistent and, unlike scaling by W^{-1/2}, allows zero weights.
   SparseMatrix<double> ck1_mat = get_dk_mat(k + 1, x, true);
+  VectorXd resid = y - project_polynomials(x, y, weights, k);
   SparseQR<SparseMatrix<double>, Ord> qr;
-  qr.compute(col_scale(ck1_mat, sqrt_weights.inverse()).transpose());
-  VectorXd u_infty = qr.solve((y.array() * sqrt_weights).matrix());
+  qr.compute(ck1_mat.transpose());
+  VectorXd u_infty = qr.solve((resid.array() * weights).matrix());
   return u_infty.lpNorm<Eigen::Infinity>();
 }
 

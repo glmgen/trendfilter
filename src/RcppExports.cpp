@@ -11,6 +11,40 @@ Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
 Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
+// bw_lambda_seq
+Rcpp::List bw_lambda_seq(NumericVector x, Eigen::VectorXd const y, Eigen::ArrayXd const weights, int k, Eigen::VectorXd lambda, int linear_solver, double space_tolerance_ratio, bool early_stop, double devmax, double fdev, int mnlam);
+RcppExport SEXP _trendfilter_bw_lambda_seq(SEXP xSEXP, SEXP ySEXP, SEXP weightsSEXP, SEXP kSEXP, SEXP lambdaSEXP, SEXP linear_solverSEXP, SEXP space_tolerance_ratioSEXP, SEXP early_stopSEXP, SEXP devmaxSEXP, SEXP fdevSEXP, SEXP mnlamSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Eigen::VectorXd const >::type y(ySEXP);
+    Rcpp::traits::input_parameter< Eigen::ArrayXd const >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    Rcpp::traits::input_parameter< Eigen::VectorXd >::type lambda(lambdaSEXP);
+    Rcpp::traits::input_parameter< int >::type linear_solver(linear_solverSEXP);
+    Rcpp::traits::input_parameter< double >::type space_tolerance_ratio(space_tolerance_ratioSEXP);
+    Rcpp::traits::input_parameter< bool >::type early_stop(early_stopSEXP);
+    Rcpp::traits::input_parameter< double >::type devmax(devmaxSEXP);
+    Rcpp::traits::input_parameter< double >::type fdev(fdevSEXP);
+    Rcpp::traits::input_parameter< int >::type mnlam(mnlamSEXP);
+    rcpp_result_gen = Rcpp::wrap(bw_lambda_seq(x, y, weights, k, lambda, linear_solver, space_tolerance_ratio, early_stop, devmax, fdev, mnlam));
+    return rcpp_result_gen;
+END_RCPP
+}
+// bw_spectrum
+Rcpp::List bw_spectrum(NumericVector x, Eigen::ArrayXd const weights, int k);
+RcppExport SEXP _trendfilter_bw_spectrum(SEXP xSEXP, SEXP weightsSEXP, SEXP kSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< NumericVector >::type x(xSEXP);
+    Rcpp::traits::input_parameter< Eigen::ArrayXd const >::type weights(weightsSEXP);
+    Rcpp::traits::input_parameter< int >::type k(kSEXP);
+    rcpp_result_gen = Rcpp::wrap(bw_spectrum(x, weights, k));
+    return rcpp_result_gen;
+END_RCPP
+}
 // smat_to_mat
 Eigen::MatrixXd smat_to_mat(const Eigen::SparseMatrix<double>& sparseMat, int k, bool equal_spaced);
 RcppExport SEXP _trendfilter_smat_to_mat(SEXP sparseMatSEXP, SEXP kSEXP, SEXP equal_spacedSEXP) {
@@ -200,6 +234,8 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
+    {"_trendfilter_bw_lambda_seq", (DL_FUNC) &_trendfilter_bw_lambda_seq, 11},
+    {"_trendfilter_bw_spectrum", (DL_FUNC) &_trendfilter_bw_spectrum, 3},
     {"_trendfilter_smat_to_mat", (DL_FUNC) &_trendfilter_smat_to_mat, 3},
     {"_trendfilter_configure_denseD_test", (DL_FUNC) &_trendfilter_configure_denseD_test, 2},
     {"_trendfilter_linear_single_solve_test", (DL_FUNC) &_trendfilter_linear_single_solve_test, 6},

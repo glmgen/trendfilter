@@ -34,7 +34,11 @@ predict.trendfilter <- function(object, newx = NULL, lambda = NULL, deriv = 0L, 
     dspline_interp(th, object$k, object$x, newx)
   })
   # 2. interpolate the solutions to lambdas off the original values
-  lam_list <- interpolate_lambda(object$lambda, lambda)
+  lam_list <- interpolate_lambda(
+    object$lambda,
+    lambda,
+    log_scale = inherits(object, "bwfilter")
+  )
   fits <- interpolate_mat(interp, lam_list, lambda)
   drop(fits)
 }
