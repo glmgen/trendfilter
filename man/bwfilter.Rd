@@ -11,9 +11,9 @@ bwfilter(
   k = 3L,
   lambda = NULL,
   nlambda = 50L,
-  lambda_max = NULL,
+  lambda_max = bw_lambda_max(n, k, control$linear_solver),
   lambda_min = NULL,
-  lambda_min_ratio = NULL,
+  lambda_min_ratio = 0.008/(n * 4^(k + 1) * lambda_max),
   standardize = TRUE,
   compute_dof = FALSE,
   control = bwfilter_control_list()
@@ -32,34 +32,29 @@ Note that internally, these are rescaled to sum to 1.}
 \item{k}{Integer. Order of the penalty is \code{k + 1}, as in \code{\link[=trendfilter]{trendfilter()}}.
 Must be at most \code{n - 2}.}
 
-\item{lambda}{Vector. A user supplied sequence of tuning parameters which
-determines the balance between data fidelity and smoothness of the
-estimated curve; larger \code{lambda} results in a smoother estimate. The
-default, \code{NULL} results in an automatic computation based on \code{nlambda},
-the largest value of \code{lambda} that would result in a maximally smooth
-estimate, and \code{lambda_min_ratio}. Supplying a value of \code{lambda} overrides
-this behaviour. It is likely better to supply a
-decreasing sequence of \code{lambda} values than a single (small) value. If
-supplied, the user-defined \code{lambda} sequence is automatically sorted in
-decreasing order.}
+\item{lambda}{Vector. A user supplied sequence of tuning parameters. It is
+sorted in decreasing order and may include \code{Inf}, which gives the
+weighted least squares polynomial fit of degree \code{k}. The default, \code{NULL},
+uses \code{Inf} followed by \code{nlambda - 1} values decreasing geometrically from
+\code{lambda_max} to \code{lambda_min}.}
 
-\item{nlambda}{Integer. Number of lambda values to use in the sequence.}
+\item{nlambda}{Integer. Number of \code{lambda} values in the default sequence,
+including \code{Inf}.}
 
-\item{lambda_max}{Optional value for the largest \code{lambda} to use. By
-default, this follows the rule of thumb used for ridge regression in
-\code{glmnet}: the largest \code{lambda} that would be used by \code{\link[=trendfilter]{trendfilter()}} (the
-smallest value giving a polynomial fit under the \eqn{\ell_1} penalty)
-divided by \code{0.001}.}
+\item{lambda_max}{The largest finite \code{lambda} in the default sequence. The
+default, \code{\link[=bw_lambda_max]{bw_lambda_max()}}, depends only on \code{n}, \code{k}, and the solver.}
 
 \item{lambda_min}{Optional value for the smallest \code{lambda} to use (> 0).}
 
 \item{lambda_min_ratio}{If neither \code{lambda} nor \code{lambda_min} is specified,
-\code{lambda_min = lambda_max * lambda_min_ratio}. The default, \code{NULL}, uses
-\code{1e-4^(k + 1)}: \code{glmnet}'s ridge default raised to the power \code{k + 1}. The
-effective degrees of freedom grow roughly like
-\eqn{\lambda^{-1/(2(k+1))}}, so this gives a similar range of fits for
-every \code{k}. This argument has no effect if there is a user-defined
-\code{lambda} sequence.}
+\code{lambda_min = lambda_max * lambda_min_ratio}. The default gives
+\eqn{\lambda_{\min} = 0.008 / (n 4^{k+1})}, which shrinks even the
+roughest component of \code{y} by under 2\%, so the fit nearly interpolates.
+The effective degrees of freedom grow roughly like
+\eqn{\lambda^{-1/(2(k+1))}}, so the default sequence is spread evenly in
+log(dof). It usually stops before reaching \code{lambda_min} (see
+\code{\link[=bwfilter_control_list]{bwfilter_control_list()}}). This argument has no effect if there is a
+user-defined \code{lambda} sequence.}
 
 \item{standardize}{If \code{TRUE} (the default), \code{y} will be centered and scaled
 by its mean and standard deviation (and the operation inverted for \code{theta}
@@ -83,7 +78,13 @@ Among the list components:
 \item \code{weights} the vector of observation weights
 \item \code{theta} the estimated curve evaluated at \code{x}. This is a matrix with
 each column corresponding to one value of \code{lambda}.
-\item \code{lambda} the values of \code{lambda} actually used in the algorithm.
+\item \code{lambda} the values of \code{lambda} actually used in the algorithm. With the
+default sequence, this may be shorter than \code{nlambda}: as in \code{glmnet},
+the path stops early once the fits are nearly interpolating (see
+\code{\link[=bwfilter_control_list]{bwfilter_control_list()}}).
+\item \code{dev_ratio} the fraction of (weighted) deviance explained,
+\eqn{1 - \sum_i w_i (y_i - \hat\theta_i)^2 / \sum_i w_i (y_i -
+    \bar{y})^2}, for each \code{lambda}.
 \item \code{k} order of the penalty minus 1.
 \item \code{dof} if \code{compute_dof = TRUE}, the (exact) effective degrees of freedom
 of the linear smoother, \eqn{\mathrm{tr}((W + 2\lambda D^\top D)^{-1}

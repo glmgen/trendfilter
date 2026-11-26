@@ -38,6 +38,14 @@ using Eigen::MatrixXd;
  *
  * which is a single linear solve per lambda (no ADMM iterations). We reuse
  * `LinearSystem` with "k" set to k + 1 and a zero ADMM adjustment.
+ *
+ * lambda = Inf is allowed: the solution is then the weighted least squares
+ * projection of y onto polynomials of degree k (the null space of D), which
+ * we compute directly rather than through a badly conditioned solve.
+ *
+ * If `early_stop`, the path is truncated as in glmnet: after `mnlam` fits,
+ * stop once the fraction of (weighted) deviance explained exceeds `devmax`
+ * or increases by less than `fdev` times its current value.
  */
 
 // [[Rcpp::export]]
@@ -48,7 +56,11 @@ Rcpp::List bw_lambda_seq(
     int k,
     Eigen::VectorXd lambda,
     int linear_solver = 2,
-    double space_tolerance_ratio = -1.0) {
+    double space_tolerance_ratio = -1.0,
+    bool early_stop = false,
+    double devmax = 0.999,
+    double fdev = 1e-5,
+    int mnlam = 5) {
   int n = x.size();
   int nlambda = lambda.size();
   int kk = k + 1; // order of the penalty
@@ -71,7 +83,12 @@ Rcpp::List bw_lambda_seq(
   }
 
   MatrixXd theta(n, nlambda);
-  NumericVector objective(nlambda);
+  Eigen::VectorXd objective(nlambda);
+  Eigen::VectorXd dev_ratio(nlambda);
+  double ybar = (y.array() * weights).sum() / weights.sum();
+  double nulldev = ((y.array() - ybar).square() * weights).sum();
+  double rsq_old = 0.0;
+  int nfit = nlambda;
   VectorXd zeros = VectorXd::Zero(n - kk);
   VectorXd sol(n);
   LinearSystem linear_system;
@@ -80,7 +97,10 @@ Rcpp::List bw_lambda_seq(
   for (int i = 0; i < nlambda; i++) {
     Rcpp::checkUserInterrupt();
     double rho = 2.0 * lambda[i];
-    if (rho > Eigen::NumTraits<double>::epsilon()) {
+    bool is_inf = std::isinf(lambda[i]);
+    if (is_inf) {
+      theta.col(i) = project_polynomials(x, y, weights, k);
+    } else if (rho > Eigen::NumTraits<double>::epsilon()) {
       linear_system.construct(y, weights, kk, rho, dmat_sq, denseD, s_seq,
                               linear_solver);
       linear_system.compute(linear_solver);
@@ -91,14 +111,29 @@ Rcpp::List bw_lambda_seq(
       theta.col(i) = y;
     }
     VectorXd Dth = dmat * theta.col(i);
-    objective[i] = 0.5 * ((y - theta.col(i)).array().square() * weights).sum() +
-      lambda[i] * Dth.squaredNorm();
+    double rss = ((y - theta.col(i)).array().square() * weights).sum();
+    // D theta = 0 when lambda = Inf, and Inf * 0 is NaN
+    objective[i] = 0.5 * rss + (is_inf ? 0.0 : lambda[i] * Dth.squaredNorm());
+    double rsq = nulldev > 0 ? 1.0 - rss / nulldev : 1.0;
+    dev_ratio[i] = rsq;
+    if (early_stop && i + 1 >= mnlam) {
+      if (rsq - rsq_old < fdev * rsq || rsq > devmax) {
+        nfit = i + 1;
+        break;
+      }
+    }
+    rsq_old = rsq;
   }
+  theta.conservativeResize(Eigen::NoChange, nfit);
+  lambda.conservativeResize(nfit);
+  objective.conservativeResize(nfit);
+  dev_ratio.conservativeResize(nfit);
 
   return Rcpp::List::create(
     Rcpp::Named("theta") = theta,
     Rcpp::Named("lambda") = lambda,
-    Rcpp::Named("objective") = objective
+    Rcpp::Named("objective") = objective,
+    Rcpp::Named("dev_ratio") = dev_ratio
   );
 }
 

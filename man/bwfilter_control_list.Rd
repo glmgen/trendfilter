@@ -7,6 +7,9 @@
 bwfilter_control_list(
   linear_solver = c("kalman_filter", "sparse_qr", "sparse_cholesky"),
   space_tolerance_ratio = sqrt(.Machine$double.eps),
+  devmax = 0.999,
+  fdev = 1e-05,
+  mnlam = 5L,
   ...
 )
 }
@@ -20,6 +23,13 @@ tridiagonal and is always solved directly.}
 \item{space_tolerance_ratio}{Double. The tolerance ratio of to detect that
 the signal is equally spaced.}
 
+\item{devmax, fdev, mnlam}{Early stopping of the default \code{lambda} path, as
+in \code{glmnet}. After the first \code{mnlam} values of \code{lambda}, the path stops
+once the fraction of deviance explained exceeds \code{devmax}, or increases by
+less than \code{fdev} times its current value. Fewer than \code{nlambda} fits may
+then be returned. Ignored if \code{lambda} is supplied. Set \code{devmax = 1} and
+\code{fdev = 0} to always fit the whole path.}
+
 \item{...}{not used}
 }
 \value{
@@ -31,4 +41,5 @@ These arguments are used to handle the internals of \code{\link[=bwfilter]{bwfil
 \examples{
 bwfilter_control_list()
 bwfilter_control_list(linear_solver = "sparse_qr")
+bwfilter_control_list(devmax = 1, fdev = 0)
 }

@@ -41,18 +41,55 @@ test_that("standardization does not change the fit", {
   expect_equal(f1$theta, f2$theta, tolerance = 1e-8)
 })
 
-test_that("default lambda path follows the (scaled) glmnet ridge rule", {
-  ys <- (y - mean(y)) / sd(y)
+test_that("default path starts at the polynomial fit, then bw_lambda_max()", {
+  no_stop <- bwfilter_control_list(devmax = 1, fdev = 0)
   for (k in 0:3) {
-    fit <- bwfilter(y, k = k, compute_dof = TRUE)
-    xsc <- (x_even - 1) / (n - 1) * n
-    lmax <- get_lambda_max(xsc, ys, rep(1 / n, n), k) / 1e-3
+    fit <- bwfilter(y, x_uneven, w, k = k, compute_dof = TRUE, control = no_stop)
     expect_length(fit$lambda, 50L)
-    expect_equal(fit$lambda[1], lmax)
-    expect_equal(fit$lambda[50], lmax * 1e-4^(k + 1))
+    expect_identical(fit$lambda[1], Inf)
+    # lambda = Inf is the weighted least squares polynomial fit
+    pfit <- if (k == 0) {
+      rep(weighted.mean(y, w), n)
+    } else {
+      fitted(lm(y ~ poly(x_uneven, k), weights = w))
+    }
+    expect_equal(fit$theta[, 1], unname(pfit))
+    expect_equal(fit$dof[1], k + 1)
+    expect_equal(fit$objective[1], 0.5 * sum(w / sum(w) * (fit$theta[, 1] - y)^2) / var(y))
+    lmax <- bw_lambda_max(n, k)
+    expect_equal(fit$lambda[2], lmax)
+    expect_equal(fit$lambda[50], 0.008 / (n * 4^(k + 1)))
     expect_false(is.unsorted(fit$dof))
-    expect_true(all(fit$dof > k + 1))
+    expect_lt(fit$dof[2], k + 1.5)
+    expect_gt(fit$dof[50], 0.85 * n)
   }
+})
+
+test_that("bw_lambda_max() is the smaller of the formula and the solver cap", {
+  expect_equal(bw_lambda_max(50, 3), 8 * 50^7 / (2.5 * pi)^8)
+  expect_equal(bw_lambda_max(5000, 3), 1e16 / (2 * 5000 * 4^4))
+  expect_equal(bw_lambda_max(5000, 3, "sparse_qr"), 1e12 / (2 * 5000 * 4^4))
+  fit <- bwfilter(
+    y,
+    nlambda = 3L,
+    control = bwfilter_control_list(linear_solver = "sparse_cholesky")
+  )
+  expect_equal(fit$lambda[2], bw_lambda_max(n, 3, "sparse_cholesky"))
+})
+
+test_that("prediction handles lambda = Inf and interpolates in log(lambda)", {
+  fit <- bwfilter(y, k = 2)
+  p <- predict(fit, lambda = c(Inf, fit$lambda[2], fit$lambda[5]))
+  expect_equal(p, fit$theta[, c(1, 2, 5)])
+  # between Inf and lambda[2], weight lambda[2] / lambda on the second fit
+  p <- predict(fit, lambda = 4 * fit$lambda[2])
+  expect_equal(p, 0.75 * fit$theta[, 1] + 0.25 * fit$theta[, 2])
+  mid <- sqrt(fit$lambda[30] * fit$lambda[31])
+  expect_equal(
+    predict(fit, lambda = mid),
+    (fit$theta[, 30] + fit$theta[, 31]) / 2
+  )
+  expect_no_warning(predict(fit))
 })
 
 test_that("lambda = 0 interpolates and nlambda = 1 works", {
@@ -60,11 +97,17 @@ test_that("lambda = 0 interpolates and nlambda = 1 works", {
   expect_equal(fit$theta, y)
   expect_equal(fit$dof, n)
   expect_null(bwfilter(y, lambda = 0)$dof)
-  fit <- bwfilter(y, k = 1, lambda_min_ratio = 1e-4)
-  expect_equal(fit$lambda[50] / fit$lambda[1], 1e-4)
-  fit <- bwfilter(y, nlambda = 1L)
-  expect_length(fit$lambda, 1L)
-  expect_gt(fit$lambda, 0)
+  fit <- bwfilter(
+    y,
+    k = 1, lambda_min_ratio = 1e-4,
+    control = bwfilter_control_list(devmax = 1, fdev = 0)
+  )
+  expect_equal(fit$lambda[50] / fit$lambda[2], 1e-4)
+  expect_identical(bwfilter(y, nlambda = 1L)$lambda, Inf)
+  expect_identical(bwfilter(y, nlambda = 2L)$lambda, c(Inf, bw_lambda_max(n, 3)))
+  # Inf may also be supplied by the user
+  fit <- bwfilter(y, lambda = c(1, Inf))
+  expect_equal(fit$lambda, c(Inf, 1))
 })
 
 test_that("unsorted x is handled and zero weights are allowed", {
@@ -89,9 +132,11 @@ test_that("unsorted x is handled and zero weights are allowed", {
       }
     }
   }
-  # default lambda sequence is finite with zero weights
-  lam0 <- bwfilter(y, weights = w0)$lambda
-  expect_true(all(is.finite(lam0) & lam0 > 0))
+  # default lambda sequence is valid with zero weights
+  fit0 <- bwfilter(y, weights = w0)
+  expect_identical(fit0$lambda[1], Inf)
+  expect_true(all(is.finite(fit0$lambda[-1]) & fit0$lambda[-1] > 0))
+  expect_false(anyNA(fit0$theta))
   lam0 <- trendfilter(y, weights = w0)$lambda
   expect_true(all(is.finite(lam0) & lam0 > 0))
 })
@@ -116,4 +161,39 @@ test_that("Kalman filter handles zero weights in the diffuse initialization", {
   w0[1:2] <- 0
   fit <- trendfilter(y, weights = w0, k = 2, lambda = c(1, .1))
   expect_false(anyNA(fit$theta))
+})
+
+test_that("default path stops early as in glmnet, user lambda does not", {
+  fit <- bwfilter(y, k = 3)
+  nfit <- length(fit$lambda)
+  expect_lt(nfit, 50L)
+  expect_gte(nfit, 5L)
+  expect_equal(ncol(fit$theta), nfit)
+  expect_length(fit$objective, nfit)
+  expect_length(fit$dev_ratio, nfit)
+  expect_false(is.unsorted(fit$dev_ratio))
+  # stopped by one of the two rules, and not before
+  dr <- fit$dev_ratio
+  expect_true(dr[nfit] > 0.999 || dr[nfit] - dr[nfit - 1] < 1e-5 * dr[nfit])
+  expect_true(all(dr[-nfit] <= 0.999))
+  # dev_ratio is the weighted fraction of deviance explained
+  expect_equal(
+    fit$dev_ratio[3],
+    1 - sum((y - fit$theta[, 3])^2) / sum((y - mean(y))^2)
+  )
+  # a stricter devmax stops sooner; mnlam is respected
+  fit2 <- bwfilter(y, k = 3, control = bwfilter_control_list(devmax = 0.9))
+  expect_lt(length(fit2$lambda), nfit)
+  fit3 <- bwfilter(
+    y,
+    k = 3, control = bwfilter_control_list(devmax = 0, mnlam = 7)
+  )
+  expect_length(fit3$lambda, 7L)
+  # no early stopping for a user-supplied lambda
+  fit4 <- bwfilter(y, k = 3, lambda = bwfilter(
+    y,
+    k = 3, control = bwfilter_control_list(devmax = 1, fdev = 0)
+  )$lambda)
+  expect_length(fit4$lambda, 50L)
+  expect_no_warning(bwfilter(y, k = 3))
 })

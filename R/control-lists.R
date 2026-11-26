@@ -121,6 +121,12 @@ print.trendfilter_control <- function(x, ...) {
 #'   or `sparse_cholesky` for sparse Cholesky. When `k = 0` the system is
 #'   tridiagonal and is always solved directly.
 #' @inheritParams admm_control_list
+#' @param devmax,fdev,mnlam Early stopping of the default `lambda` path, as
+#'   in `glmnet`. After the first `mnlam` values of `lambda`, the path stops
+#'   once the fraction of deviance explained exceeds `devmax`, or increases by
+#'   less than `fdev` times its current value. Fewer than `nlambda` fits may
+#'   then be returned. Ignored if `lambda` is supplied. Set `devmax = 1` and
+#'   `fdev = 0` to always fit the whole path.
 #'
 #' @return An object of class `bwfilter_control`
 #' @export
@@ -128,16 +134,23 @@ print.trendfilter_control <- function(x, ...) {
 #' @examples
 #' bwfilter_control_list()
 #' bwfilter_control_list(linear_solver = "sparse_qr")
+#' bwfilter_control_list(devmax = 1, fdev = 0)
 bwfilter_control_list <- function(
   linear_solver = c("kalman_filter", "sparse_qr", "sparse_cholesky"),
   space_tolerance_ratio = sqrt(.Machine$double.eps),
+  devmax = 0.999,
+  fdev = 1e-5,
+  mnlam = 5L,
   ...
 ) {
   rlang::check_dots_empty()
   linear_solver <- rlang::arg_match(linear_solver)
   assert_numeric(space_tolerance_ratio, lower = 0, finite = TRUE, len = 1L)
+  assert_numeric(devmax, lower = 0, upper = 1, len = 1L)
+  assert_numeric(fdev, lower = 0, upper = 1, len = 1L)
+  assert_integerish(mnlam, lower = 1L, len = 1L)
   structure(
-    enlist(linear_solver, space_tolerance_ratio),
+    enlist(linear_solver, space_tolerance_ratio, devmax, fdev, mnlam),
     class = "bwfilter_control"
   )
 }
